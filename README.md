@@ -174,6 +174,150 @@ defmodule MyGenomicAnalysis do
 end
 ```
 
+## Data Structures
+
+The library represents SAM/BAM data using the following key structures:
+
+### `SamParser.SamFile`
+
+The top-level structure containing both the header and alignment records:
+
+```elixir
+%SamParser.SamFile{
+  header: %SamParser.Header{},  # Header information
+  alignments: []                # List of alignment records
+}
+```
+
+### `SamParser.Header`
+
+Stores the SAM file header components:
+
+```elixir
+%SamParser.Header{
+  hd: nil,   # @HD line fields as a map
+  sq: [],    # List of @SQ entries (reference sequences)
+  rg: [],    # List of @RG entries (read groups)
+  pg: [],    # List of @PG entries (programs)
+  co: []     # List of @CO entries (comments)
+}
+```
+
+### `SamParser.Alignment`
+
+Represents a single alignment record with all SAM fields:
+
+```elixir
+%SamParser.Alignment{
+  # Mandatory fields
+  qname: nil,   # Query template NAME
+  flag: 0,      # Bitwise FLAG
+  rname: "*",   # Reference sequence NAME
+  pos: 0,       # 1-based leftmost mapping POSition
+  mapq: 0,      # MAPping Quality
+  cigar: "*",   # CIGAR string
+  rnext: "*",   # Ref. name of the mate/next read
+  pnext: 0,     # Position of the mate/next read
+  tlen: 0,      # Observed Template LENgth
+  seq: "*",     # Segment SEQuence
+  qual: "*",    # ASCII of Phred-scaled base QUALity+33
+  # Optional field storage
+  tags: %{}     # Map to store TAG:TYPE:VALUE optional fields
+}
+```
+
+Optional tags are stored in the `tags` map as `{tag => {type, value}}` entries.
+
+## API Reference
+
+### File Parsing
+
+| Function | Description |
+|----------|-------------|
+| `parse_file(path)` | Parses either SAM or BAM file based on file extension |
+| `parse_sam(path)` | Parses a SAM format file |
+| `parse_bam(path)` | Parses a BAM format file |
+
+### Data Access and Processing
+
+| Function | Description |
+|----------|-------------|
+| `parse_header(header_lines)` | Parses SAM header lines into a Header struct |
+| `parse_alignment(line)` | Parses a single SAM alignment line |
+| `parse_optional_fields(alignment, fields)` | Parses optional TAG:TYPE:VALUE fields |
+| `parse_tag_value(type, value)` | Parses tag values based on their declared type |
+| `parse_cigar(cigar)` | Parses CIGAR string into a list of operations |
+| `reference_sequences(sam_file)` | Returns a list of reference sequence names from the header |
+
+### Filtering
+
+| Function | Description |
+|----------|-------------|
+| `filter_by_reference(sam_file, reference)` | Filters alignments by reference sequence name |
+| `filter_by_position(sam_file, start_pos, end_pos)` | Filters alignments by position range |
+
+### Flag Operations
+
+| Function | Description |
+|----------|-------------|
+| `is_mapped?(alignment)` | Checks if read is mapped (0x4 flag bit) |
+| `is_paired?(alignment)` | Checks if read is paired (0x1 flag bit) |
+| `is_properly_paired?(alignment)` | Checks if read is properly paired (0x2 flag bit) |
+| `is_reverse?(alignment)` | Checks if read is reverse complemented (0x10 flag bit) |
+| `is_secondary?(alignment)` | Checks if read is a secondary alignment (0x100 flag bit) |
+| `is_supplementary?(alignment)` | Checks if read is a supplementary alignment (0x800 flag bit) |
+
+### File Writing
+
+| Function | Description |
+|----------|-------------|
+| `write_sam(sam_file, path)` | Writes a SamFile struct to a SAM format file |
+| `format_header(header)` | Formats header section for writing |
+| `format_header_section(type, fields)` | Formats a header section for writing |
+| `format_alignment(alignment)` | Formats an alignment record for writing |
+| `format_tag_value(type, value)` | Formats tag values for writing based on their type |
+
+### Utility Functions
+
+| Function | Description |
+|----------|-------------|
+| `infer_array_type(array)` | Infers the array type for "B" tag values |
+| `parse_header_line(line)` | Parses a header line into a map of tag:value pairs |
+
+## Examples of Data Structure Usage
+
+```elixir
+# Examine the structure of a parsed SAM file
+sam_file = SamParser.parse_file("sample.sam")
+IO.inspect(sam_file.header.sq)  # List all reference sequences
+
+# Create a new alignment manually
+new_alignment = %SamParser.Alignment{
+  qname: "read123",
+  flag: 0,
+  rname: "chr1",
+  pos: 100,
+  mapq: 60,
+  cigar: "100M",
+  seq: "ACGT...",
+  qual: "FFFF..."
+}
+
+# Add a tag to an alignment
+alignment_with_tag = %{new_alignment | 
+  tags: Map.put(new_alignment.tags, "NM", {"i", 0})
+}
+
+# Add this alignment to the file
+updated_sam_file = %{sam_file | 
+  alignments: [alignment_with_tag | sam_file.alignments]
+}
+
+# Write the updated file
+SamParser.write_sam(updated_sam_file, "updated.sam")
+```
+
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0 - see the [COPYING](COPYING) file for details.
