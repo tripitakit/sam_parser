@@ -15,6 +15,7 @@ defmodule SamParser do
   @doc """
   Parses a SAM or BAM file based on the file extension.
   """
+  @spec parse_file(String.t()) :: SamFile.t()
   def parse_file(path) do
     cond do
       String.ends_with?(path, ".sam") -> parse_sam(path)
@@ -26,6 +27,7 @@ defmodule SamParser do
   @doc """
   Parses a SAM file from the given path and returns a SamFile struct.
   """
+  @spec parse_sam(String.t()) :: SamFile.t()
   def parse_sam(path) do
     try do
       file_content = File.read!(path)
@@ -45,6 +47,7 @@ defmodule SamParser do
   @doc """
   Parses a BAM file from the given path and returns a SamFile struct.
   """
+  @spec parse_bam(String.t()) :: SamFile.t()
   def parse_bam(path) do
     BamParser.parse_bam(path)
   end
@@ -52,6 +55,7 @@ defmodule SamParser do
   @doc """
   Parses the header section from a list of header lines.
   """
+  @spec parse_header([String.t()]) :: Header.t()
   def parse_header(header_lines) do
     Enum.reduce(header_lines, %Header{}, fn line, header ->
       cond do
@@ -83,6 +87,7 @@ defmodule SamParser do
   @doc """
   Parses an alignment line from SAM into an Alignment struct.
   """
+  @spec parse_alignment(String.t()) :: Alignment.t()
   def parse_alignment(line) do
     fields = String.split(line, "\t")
 
@@ -112,6 +117,7 @@ defmodule SamParser do
   @doc """
   Parses optional fields in TAG:TYPE:VALUE format and adds them to the alignment.
   """
+  @spec parse_optional_fields(Alignment.t(), [String.t()]) :: Alignment.t()
   def parse_optional_fields(alignment, []), do: alignment
   def parse_optional_fields(alignment, optional_fields) do
     tags = Enum.reduce(optional_fields, %{}, fn field, acc ->
@@ -127,6 +133,7 @@ defmodule SamParser do
   @doc """
   Parse the value of an optional field based on its type.
   """
+  @spec parse_tag_value(String.t(), String.t()) :: String.t() | integer() | float() | [String.t() | integer() | float()]
   def parse_tag_value("A", value), do: value
   def parse_tag_value("i", value), do: String.to_integer(value)
   def parse_tag_value("I", value), do: String.to_integer(value)
@@ -156,6 +163,7 @@ defmodule SamParser do
   Parse CIGAR string into a list of operations and expand = and X operations.
   Returns a list of {op_length, op_type} tuples.
   """
+  @spec parse_cigar(String.t()) :: [{non_neg_integer(), String.t()}]
   def parse_cigar("*"), do: []
   def parse_cigar(cigar) do
     Regex.scan(~r/(\d+)([MIDNSHP=X])/i, cigar, capture: :all_but_first)
@@ -165,6 +173,7 @@ defmodule SamParser do
   @doc """
   Checks if a read is properly mapped based on its FLAG field.
   """
+  @spec is_mapped?(Alignment.t()) :: boolean()
   def is_mapped?(alignment) do
     (alignment.flag &&& 0x4) == 0
   end
@@ -172,6 +181,7 @@ defmodule SamParser do
   @doc """
   Checks if a read is paired based on its FLAG field.
   """
+  @spec is_paired?(Alignment.t()) :: boolean()
   def is_paired?(alignment) do
     (alignment.flag &&& 0x1) != 0
   end
@@ -179,6 +189,7 @@ defmodule SamParser do
   @doc """
   Checks if a read is properly paired based on its FLAG field.
   """
+  @spec is_properly_paired?(Alignment.t()) :: boolean()
   def is_properly_paired?(alignment) do
     (alignment.flag &&& 0x2) != 0
   end
@@ -186,6 +197,7 @@ defmodule SamParser do
   @doc """
   Checks if a read is reverse complemented based on its FLAG field.
   """
+  @spec is_reverse?(Alignment.t()) :: boolean()
   def is_reverse?(alignment) do
     (alignment.flag &&& 0x10) != 0
   end
@@ -193,6 +205,7 @@ defmodule SamParser do
   @doc """
   Checks if a read is a secondary alignment based on its FLAG field.
   """
+  @spec is_secondary?(Alignment.t()) :: boolean()
   def is_secondary?(alignment) do
     (alignment.flag &&& 0x100) != 0
   end
@@ -200,6 +213,7 @@ defmodule SamParser do
   @doc """
   Checks if a read is a supplementary alignment based on its FLAG field.
   """
+  @spec is_supplementary?(Alignment.t()) :: boolean()
   def is_supplementary?(alignment) do
     (alignment.flag &&& 0x800) != 0
   end
@@ -207,6 +221,7 @@ defmodule SamParser do
   @doc """
   Returns a list of reference sequences from the header.
   """
+  @spec reference_sequences(SamFile.t()) :: [String.t()]
   def reference_sequences(sam_file) do
     Enum.map(sam_file.header.sq, fn sq -> sq["SN"] end)
   end
@@ -214,6 +229,7 @@ defmodule SamParser do
   @doc """
   Filters alignments by reference name.
   """
+  @spec filter_by_reference(SamFile.t(), String.t()) :: SamFile.t()
   def filter_by_reference(sam_file, reference) do
     filtered = Enum.filter(sam_file.alignments, fn aln ->
       aln.rname == reference
@@ -225,6 +241,7 @@ defmodule SamParser do
   @doc """
   Filters alignments by position range.
   """
+  @spec filter_by_position(SamFile.t(), non_neg_integer(), non_neg_integer()) :: SamFile.t()
   def filter_by_position(sam_file, start_pos, end_pos) do
     filtered = Enum.filter(sam_file.alignments, fn aln ->
       aln.pos >= start_pos && aln.pos <= end_pos
@@ -236,6 +253,7 @@ defmodule SamParser do
   @doc """
   Writes a SamFile struct back to a SAM format file.
   """
+  @spec write_sam(SamFile.t(), String.t()) :: :ok | {:error, atom()}
   def write_sam(sam_file, path) do
     header_lines = format_header(sam_file.header)
     alignment_lines = Enum.map(sam_file.alignments, &format_alignment/1)
@@ -247,6 +265,7 @@ defmodule SamParser do
   @doc """
   Formats the header section for writing.
   """
+  @spec format_header(Header.t()) :: [String.t()]
   def format_header(header) do
     hd_line = if header.hd, do: [format_header_section("@HD", header.hd)], else: []
 
@@ -261,6 +280,7 @@ defmodule SamParser do
   @doc """
   Formats a header section for writing.
   """
+  @spec format_header_section(String.t(), map()) :: String.t()
   def format_header_section(type, fields) do
     field_strings = fields
     |> Map.drop([:type])  # Exclude the type field
@@ -272,6 +292,7 @@ defmodule SamParser do
   @doc """
   Formats an alignment record for writing.
   """
+  @spec format_alignment(Alignment.t()) :: String.t()
   def format_alignment(alignment) do
     mandatory = [
       alignment.qname,
@@ -298,6 +319,7 @@ defmodule SamParser do
   @doc """
   Formats a tag value for writing.
   """
+  @spec format_tag_value(String.t(), term()) :: String.t()
   def format_tag_value("B", value) when is_list(value) do
     # Always use "i" type for integer arrays to match test expectations
     array_type = if Enum.all?(value, &is_float/1), do: "f", else: "i"
@@ -310,6 +332,7 @@ defmodule SamParser do
   @doc """
   Infers the array type for a B tag.
   """
+  @spec infer_array_type(list()) :: {String.t(), String.t()}
   def infer_array_type([first | _]) when is_float(first), do: {"f", "float"}
   def infer_array_type([first | _]) when is_integer(first) do
     # The test expects [1] to return {"i", "int32"}, so we'll handle this case separately
@@ -326,6 +349,7 @@ defmodule SamParser do
   @doc """
   Parses a header line into a map of tag:value pairs.
   """
+  @spec parse_header_line(String.t()) :: map()
   def parse_header_line(line) do
     case String.split(line, "\t") do
       [_ | fields] ->
