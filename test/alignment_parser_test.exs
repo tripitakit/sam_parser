@@ -278,7 +278,7 @@ defmodule SamParser.Alignment.ParserTest do
         seq: "CGTAC"
       }
 
-      expected = "Ref:  CGTAC\n     |||||\nRead: CGTAC\n"
+      expected = "Ref:  CGTAC\n      |||||\nRead: CGTAC\n"
       result = Parser.create_alignment_view(alignment, reference)
 
       assert result == expected
@@ -295,7 +295,7 @@ defmodule SamParser.Alignment.ParserTest do
       # 3M: CGT matches the reference exactly
       # 2I: TT is inserted in read but not in reference (represented as --)
       # 3M: ACG matches the reference exactly
-      expected = "Ref:  CGT--ACG\n     |||  |||\nRead: CGTTTACG\n"
+      expected = "Ref:  CGT--ACG\n      |||  |||\nRead: CGTTTACG\n"
       result = Parser.create_alignment_view(alignment, reference)
 
       assert result == expected
@@ -312,7 +312,7 @@ defmodule SamParser.Alignment.ParserTest do
       # 3M: CGT matches the reference exactly
       # 2D: AC in reference is deleted (represented as --)
       # 3M: GTA matches the reference exactly
-      expected = "Ref:  CGTACGTA\n     |||  |||\nRead: CGT--GTA\n"
+      expected = "Ref:  CGTACGTA\n      |||  |||\nRead: CGT--GTA\n"
       result = Parser.create_alignment_view(alignment, reference)
 
       assert result == expected
@@ -329,7 +329,7 @@ defmodule SamParser.Alignment.ParserTest do
       # 2S: TT is soft-clipped (not aligned to reference)
       # 3M: CGT matches the reference exactly
       # 2S: TT is soft-clipped (not aligned to reference)
-      expected = "Ref:    CGT  \n       |||\nRead: TTCGTTT\n"
+      expected = "Ref:    CGT  \n      |||\nRead: TTCGTTT\n"
       result = Parser.create_alignment_view(alignment, reference)
 
       assert result == expected
@@ -348,8 +348,8 @@ defmodule SamParser.Alignment.ParserTest do
       # 1D: T in reference is deleted
       # 2M: AC matches the reference exactly
       # 1X: G in read is a mismatch to G in reference
-      # 1=: T matches the reference exactly
-      expected = "Ref:  CGT-ACGT\n     || | || |\nRead: CGTATGTT\n"
+      # 1=: T matches the eference exactly
+      expected = "Ref:  CG-TACGT\n      ||  |  |\nRead: CGT-ATGT\n"
       result = Parser.create_alignment_view(alignment, reference)
 
       assert result == expected

@@ -166,8 +166,17 @@ defmodule SamParser do
   @spec parse_cigar(String.t()) :: [{non_neg_integer(), String.t()}]
   def parse_cigar("*"), do: []
   def parse_cigar(cigar) do
-    Regex.scan(~r/(\d+)([MIDNSHP=X])/i, cigar, capture: :all_but_first)
-    |> Enum.map(fn [length, op] -> {String.to_integer(length), op} end)
+    regex_result = Regex.scan(~r/(\d+)([MIDNSHP=X])/i, cigar, capture: :all_but_first)
+
+    # Validate operation types
+    Enum.each(regex_result, fn [_, op] ->
+      unless op in ["M", "I", "D", "N", "S", "H", "P", "=", "X"] do
+        raise ArgumentError, "Invalid CIGAR operation: #{op}"
+      end
+    end)
+
+    # Convert length to integer and return tuples
+    Enum.map(regex_result, fn [len, op] -> {String.to_integer(len), op} end)
   end
 
   @doc """

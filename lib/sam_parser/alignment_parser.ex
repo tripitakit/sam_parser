@@ -157,31 +157,35 @@ defmodule SamParser.Alignment.Parser do
   """
   @spec extract_reference_sequence(Alignment.t(), binary()) :: binary()
   def extract_reference_sequence(%Alignment{} = alignment, reference) do
+    # Validate CIGAR string format first
     operations = SamParser.parse_cigar(alignment.cigar)
+    Enum.each(operations, fn {_count, op} ->
+      unless op in ["M", "=", "X", "I", "D", "S", "H", "N"] do
+        raise ArgumentError, "Invalid CIGAR operation: #{op}"
+      end
+    end)
+
     start_pos = alignment.pos - 1  # Convert to 0-based
 
-    # Extract only the relevant part of the reference
-    ref_end = start_pos
-    ref_end = Enum.reduce(operations, ref_end, fn {count, op}, acc ->
+    # Calculate reference length needed
+    ref_length = Enum.reduce(operations, 0, fn {count, op}, acc ->
       case op do
         op when op in ["M", "=", "X", "D", "N"] -> acc + count
         _ -> acc
       end
     end)
 
-    # Extract reference sequence
-    reference_part = binary_part(reference, start_pos, ref_end - start_pos)
+    # Then validate reference bounds
+    if start_pos < 0 or start_pos + ref_length > byte_size(reference) do
+      raise ArgumentError, "Reference sequence access out of bounds"
+    end
+
+    reference_part = binary_part(reference, start_pos, ref_length)
 
     # Apply CIGAR operations
     {ref_seq, _} = Enum.reduce(operations, {[], 0}, fn {count, op}, {acc, ref_pos} ->
       case op do
-        "M" ->
-          seq = binary_part(reference_part, ref_pos, count)
-          {acc ++ [seq], ref_pos + count}
-        "=" ->
-          seq = binary_part(reference_part, ref_pos, count)
-          {acc ++ [seq], ref_pos + count}
-        "X" ->
+        op when op in ["M", "=", "X"] ->
           seq = binary_part(reference_part, ref_pos, count)
           {acc ++ [seq], ref_pos + count}
         "D" -> {acc, ref_pos + count}
@@ -221,123 +225,128 @@ defmodule SamParser.Alignment.Parser do
   """
   @spec create_alignment_view(Alignment.t(), binary()) :: String.t()
   def create_alignment_view(%Alignment{} = alignment, reference) do
-    operations = SamParser.parse_cigar(alignment.cigar)
-    read_seq = alignment.seq
+    case alignment.cigar do
+      "*" -> "No CIGAR string available for alignment view"
+      cigar ->
+        operations = SamParser.parse_cigar(cigar)
+        read_seq = alignment.seq
 
-    if read_seq == "*" do
-      "No sequence available for alignment view"
-    else
-      # Get the reference sequence part covered by the alignment
-      start_pos = alignment.pos - 1  # Convert to 0-based
+        if read_seq == "*" do
+          "No sequence available for alignment view"
+        else
+          # Validate sequence length matches CIGAR operations
+          expected_length = Enum.reduce(operations, 0, fn {count, op}, acc ->
+            case op do
+              op when op in ["M", "=", "X", "I", "S"] -> acc + count
+              _ -> acc
+            end
+          end)
 
-      ref_end = start_pos
-      ref_end = Enum.reduce(operations, ref_end, fn {count, op}, acc ->
-        case op do
-          op when op in ["M", "=", "X", "D"] -> acc + count
-          _ -> acc
-        end
-      end)
-
-      ref_length = ref_end - start_pos
-      reference_part = binary_part(reference, start_pos, ref_length)
-
-      # Apply CIGAR operations to build alignment strings
-      {ref_aln, read_aln, match_line, _ref_pos, _read_pos} =
-        Enum.reduce(operations, {[], [], [], 0, 0}, fn {count, op}, {ref_acc, read_acc, match_acc, ref_pos, read_pos} ->
-          case op do
-            "M" ->
-              ref_part = binary_part(reference_part, ref_pos, count)
-              read_part = binary_part(read_seq, read_pos, count)
-              match = for i <- 0..(count-1) do
-                if binary_part(ref_part, i, 1) == binary_part(read_part, i, 1), do: "|", else: " "
-              end
-              {
-                ref_acc ++ [ref_part],
-                read_acc ++ [read_part],
-                match_acc ++ match,
-                ref_pos + count,
-                read_pos + count
-              }
-
-            "=" ->
-              ref_part = binary_part(reference_part, ref_pos, count)
-              read_part = binary_part(read_seq, read_pos, count)
-              {
-                ref_acc ++ [ref_part],
-                read_acc ++ [read_part],
-                match_acc ++ List.duplicate("|", count),
-                ref_pos + count,
-                read_pos + count
-              }
-
-            "X" ->
-              ref_part = binary_part(reference_part, ref_pos, count)
-              read_part = binary_part(read_seq, read_pos, count)
-              {
-                ref_acc ++ [ref_part],
-                read_acc ++ [read_part],
-                match_acc ++ List.duplicate(" ", count),
-                ref_pos + count,
-                read_pos + count
-              }
-
-            "I" ->
-              read_part = binary_part(read_seq, read_pos, count)
-              {
-                ref_acc ++ [String.duplicate("-", count)],
-                read_acc ++ [read_part],
-                match_acc ++ List.duplicate(" ", count),
-                ref_pos,
-                read_pos + count
-              }
-
-            "D" ->
-              ref_part = binary_part(reference_part, ref_pos, count)
-              {
-                ref_acc ++ [ref_part],
-                read_acc ++ [String.duplicate("-", count)],
-                match_acc ++ List.duplicate(" ", count),
-                ref_pos + count,
-                read_pos
-              }
-
-            "S" ->
-              read_part = binary_part(read_seq, read_pos, count)
-              {
-                ref_acc ++ [String.duplicate(" ", count)],
-                read_acc ++ [read_part],
-                match_acc ++ List.duplicate(" ", count),
-                ref_pos,
-                read_pos + count
-              }
-
-            "H" ->
-              # Hard clipping - sequence not present in SEQ
-              {ref_acc, read_acc, match_acc, ref_pos, read_pos}
-
-            "N" ->
-              {
-                ref_acc ++ [String.duplicate("N", count)],
-                read_acc ++ [String.duplicate(" ", count)],
-                match_acc ++ List.duplicate(" ", count),
-                ref_pos + count,
-                read_pos
-              }
-
-            _ -> {ref_acc, read_acc, match_acc, ref_pos, read_pos}
+          if String.length(read_seq) != expected_length do
+            raise ArgumentError, "Sequence length does not match CIGAR operations"
           end
-        end)
 
-      # Create the formatted alignment view
-      ref_str = Enum.join(ref_aln)
-      match_str = Enum.join(match_line)
-      read_str = Enum.join(read_aln)
+          # Get the reference sequence part covered by the alignment
+          start_pos = alignment.pos - 1  # Convert to 0-based
 
-      """
-      Ref:  #{ref_str}
-            #{match_str}
-      Read: #{read_str}
-      """
+          ref_length = Enum.reduce(operations, 0, fn {count, op}, acc ->
+            case op do
+              op when op in ["M", "=", "X", "D", "N"] -> acc + count
+              _ -> acc
+            end
+          end)
+
+          # Validate reference bounds
+          if start_pos < 0 or start_pos + ref_length > byte_size(reference) do
+            raise ArgumentError, "Reference sequence access out of bounds"
+          end
+
+          reference_part = binary_part(reference, start_pos, ref_length)
+
+          # Apply CIGAR operations to build alignment strings
+          {ref_aln, read_aln, match_line, _ref_pos, _read_pos} =
+            Enum.reduce(operations, {[], [], [], 0, 0}, fn {count, op}, {ref_acc, read_acc, match_acc, ref_pos, read_pos} ->
+              case op do
+                op when op in ["M", "="] ->
+                  ref_part = binary_part(reference_part, ref_pos, count)
+                  read_part = binary_part(read_seq, read_pos, count)
+                  match = for i <- 0..(count-1) do
+                    if binary_part(ref_part, i, 1) == binary_part(read_part, i, 1), do: "|", else: " "
+                  end
+                  {
+                    ref_acc ++ [ref_part],
+                    read_acc ++ [read_part],
+                    match_acc ++ match,
+                    ref_pos + count,
+                    read_pos + count
+                  }
+
+                "X" ->
+                  ref_part = binary_part(reference_part, ref_pos, count)
+                  read_part = binary_part(read_seq, read_pos, count)
+                  {
+                    ref_acc ++ [ref_part],
+                    read_acc ++ [read_part],
+                    match_acc ++ List.duplicate(" ", count),
+                    ref_pos + count,
+                    read_pos + count
+                  }
+
+                "I" ->
+                  read_part = binary_part(read_seq, read_pos, count)
+                  {
+                    ref_acc ++ [String.duplicate("-", count)],
+                    read_acc ++ [read_part],
+                    match_acc ++ List.duplicate(" ", count),
+                    ref_pos,
+                    read_pos + count
+                  }
+
+                "D" ->
+                  ref_part = binary_part(reference_part, ref_pos, count)
+                  {
+                    ref_acc ++ [ref_part],
+                    read_acc ++ [String.duplicate("-", count)],
+                    match_acc ++ List.duplicate(" ", count),
+                    ref_pos + count,
+                    read_pos
+                  }
+
+                "S" ->
+                  read_part = binary_part(read_seq, read_pos, count)
+                  {
+                    ref_acc ++ [String.duplicate(" ", count)],
+                    read_acc ++ [read_part],
+                    match_acc,  # No marks for soft clipping
+                    ref_pos,
+                    read_pos + count
+                  }
+
+                "H" ->
+                  # Hard clipping - sequence not present in SEQ
+                  {ref_acc, read_acc, match_acc, ref_pos, read_pos}
+
+                "N" ->
+                  {
+                    ref_acc ++ [String.duplicate("N", count)],
+                    read_acc ++ [String.duplicate("-", count)],
+                    match_acc ++ List.duplicate(" ", count),
+                    ref_pos + count,
+                    read_pos
+                  }
+
+                _ -> {ref_acc, read_acc, match_acc, ref_pos, read_pos}
+              end
+            end)
+
+          # Create the formatted alignment view with proper spacing
+          ref_str = Enum.join(ref_aln)
+          match_str = String.duplicate(" ", 6) <> Enum.join(match_line)
+          read_str = Enum.join(read_aln)
+
+          # Ensure we have consistent spacing by aligning based on the actual content
+          "Ref:  #{ref_str}\n#{String.trim_trailing(match_str)}\nRead: #{read_str}\n"
+        end
     end
   end
 end

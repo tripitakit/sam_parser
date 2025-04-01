@@ -16,4 +16,19 @@ defmodule SamParser.Alignment do
     # Optional field storage
     tags: %{}     # Map to store TAG:TYPE:VALUE optional fields
   ]
+
+  @type t() :: %__MODULE__{
+    qname: String.t() | nil,
+    flag: non_neg_integer(),
+    rname: String.t(),
+    pos: non_neg_integer(),
+    mapq: non_neg_integer(),
+    cigar: String.t(),
+    rnext: String.t(),
+    pnext: non_neg_integer(),
+    tlen: integer(),
+    seq: String.t(),
+    qual: String.t(),
+    tags: map()
+  }
 end
