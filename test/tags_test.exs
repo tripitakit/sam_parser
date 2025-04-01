@@ -26,13 +26,5 @@ defmodule SamParser.TagsTest do
     assert SamParser.format_tag_value("B", [1.1, 2.2]) == "f,1.1,2.2"
   end
 
-  test "array type inference works correctly" do
-    assert SamParser.infer_array_type([1]) == {"c", "int8"}
-    assert SamParser.infer_array_type([1.5]) == {"f", "float"}
-    assert SamParser.infer_array_type([]) == {"i", "int32"}  # Default
-    assert SamParser.infer_array_type([127]) == {"c", "int8"}
-    assert SamParser.infer_array_type([255]) == {"C", "uint8"}
-    assert SamParser.infer_array_type([32767]) == {"s", "int16"}
-    assert SamParser.infer_array_type([65535]) == {"S", "uint16"}
-  end
+
 end

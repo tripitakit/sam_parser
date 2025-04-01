@@ -134,30 +134,18 @@ defmodule SamParser do
   Parse the value of an optional field based on its type.
   """
   @spec parse_tag_value(String.t(), String.t()) :: String.t() | integer() | float() | [String.t() | integer() | float()]
-  def parse_tag_value("A", value), do: value
-  def parse_tag_value("i", value), do: String.to_integer(value)
-  def parse_tag_value("I", value), do: String.to_integer(value)
-  def parse_tag_value("s", value), do: String.to_integer(value)
-  def parse_tag_value("S", value), do: String.to_integer(value)
-  def parse_tag_value("c", value), do: String.to_integer(value)
-  def parse_tag_value("C", value), do: String.to_integer(value)
   def parse_tag_value("f", value), do: String.to_float(value)
-  def parse_tag_value("Z", value), do: value
-  def parse_tag_value("H", value), do: value  # Hex string, could parse to bytes if needed
+  def parse_tag_value(type, value) when type in ["i", "I", "s", "S", "c", "C"], do: String.to_integer(value)
+  def parse_tag_value(type, value) when type in ["A", "Z", "H"], do: value
   def parse_tag_value("B", value) do
     [array_type | elements] = String.split(value, ",")
-
-    case array_type do
-      "c" -> Enum.map(elements, &String.to_integer/1) # int8 array
-      "C" -> Enum.map(elements, &String.to_integer/1) # uint8 array
-      "s" -> Enum.map(elements, &String.to_integer/1) # int16 array
-      "S" -> Enum.map(elements, &String.to_integer/1) # uint16 array
-      "i" -> Enum.map(elements, &String.to_integer/1) # int32 array
-      "I" -> Enum.map(elements, &String.to_integer/1) # uint32 array
-      "f" -> Enum.map(elements, &String.to_float/1)   # float array
-      _ -> elements  # Default as strings if type is unknown
+    parse_fn = case array_type do
+      "f" -> &String.to_float/1
+      _ -> &String.to_integer/1
     end
+    Enum.map(elements, parse_fn)
   end
+
 
   @doc """
   Parse CIGAR string into a list of operations and expand = and X operations.
@@ -338,22 +326,6 @@ defmodule SamParser do
 
   def format_tag_value(_type, value), do: to_string(value)
 
-  @doc """
-  Infers the array type for a B tag.
-  """
-  @spec infer_array_type(list()) :: {String.t(), String.t()}
-  def infer_array_type([first | _]) when is_float(first), do: {"f", "float"}
-  def infer_array_type([first | _]) when is_integer(first) do
-    # The test expects [1] to return {"i", "int32"}, so we'll handle this case separately
-    cond do
-      first >= -128 and first <= 127 -> {"c", "int8"}
-      first >= 0 and first <= 255 -> {"C", "uint8"}
-      first >= -32768 and first <= 32767 -> {"s", "int16"}
-      first >= 0 and first <= 65535 -> {"S", "uint16"}
-      true -> {"i", "int32"}
-    end
-  end
-  def infer_array_type(_), do: {"i", "int32"}  # Default to int32 if empty or unknown
 
   @doc """
   Parses a header line into a map of tag:value pairs.
