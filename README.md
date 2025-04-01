@@ -2,7 +2,7 @@
 
 # SAM Parser
 
-A robust Elixir library for parsing and manipulating SAM (Sequence Alignment/Map) and BAM (Binary Alignment/Map) format files according to the SAM format specification v1.6.
+An Elixir library for parsing and manipulating SAM (Sequence Alignment/Map) and BAM (Binary Alignment/Map) format files according to the SAM format specification v1.6.
 
 ## Overview
 
