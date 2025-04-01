@@ -8,37 +8,9 @@ defmodule SamParser do
 
   import Bitwise
   alias SamParser.BamParser
-
-  # Define structs for storing SAM file components
-  defmodule Header do
-    @moduledoc "Structure for storing SAM header information"
-    defstruct hd: nil, sq: [], rg: [], pg: [], co: []
-  end
-
-  defmodule Alignment do
-    @moduledoc "Structure for storing SAM alignment records"
-    defstruct [
-      # Mandatory fields
-      qname: nil,   # Query template NAME
-      flag: 0,      # Bitwise FLAG
-      rname: "*",   # Reference sequence NAME
-      pos: 0,       # 1-based leftmost mapping POSition
-      mapq: 0,      # MAPping Quality
-      cigar: "*",   # CIGAR string
-      rnext: "*",   # Ref. name of the mate/next read
-      pnext: 0,     # Position of the mate/next read
-      tlen: 0,      # Observed Template LENgth
-      seq: "*",     # Segment SEQuence
-      qual: "*",    # ASCII of Phred-scaled base QUALity+33
-      # Optional field storage
-      tags: %{}     # Map to store TAG:TYPE:VALUE optional fields
-    ]
-  end
-
-  defmodule SamFile do
-    @moduledoc "Structure for storing a complete SAM file with header and alignments"
-    defstruct header: %SamParser.Header{}, alignments: []
-  end
+  alias SamParser.Header
+  alias SamParser.Alignment
+  alias SamParser.SamFile
 
   @doc """
   Parses a SAM or BAM file based on the file extension.
