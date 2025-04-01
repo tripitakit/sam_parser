@@ -157,44 +157,85 @@ defmodule SamParser.Alignment.Parser do
   """
   @spec extract_reference_sequence(Alignment.t(), binary()) :: binary()
   def extract_reference_sequence(%Alignment{} = alignment, reference) do
-    # Validate CIGAR string format first
-    operations = SamParser.parse_cigar(alignment.cigar)
-    Enum.each(operations, fn {_count, op} ->
-      unless op in ["M", "=", "X", "I", "D", "S", "H", "N"] do
-        raise ArgumentError, "Invalid CIGAR operation: #{op}"
+    # Handle empty CIGAR string case
+    if alignment.cigar == "*" do
+      ""
+    else
+      # Validate CIGAR string format first
+      operations =
+        try do
+          # First, validate CIGAR string format with a raw regex check
+          # This will catch malformed entries like "3MM5M" that might pass the parser
+          if !Regex.match?(~r/^(\d+[MIDNSHP=X])+$/, alignment.cigar) do
+            raise ArgumentError, "Invalid CIGAR format"
+          end
+
+          ops = SamParser.parse_cigar(alignment.cigar)
+          # Also check for valid CIGAR operations
+          Enum.each(ops, fn {_count, op} ->
+            unless op in ["M", "=", "X", "I", "D", "S", "H", "N"] do
+              raise ArgumentError, "Invalid CIGAR operation: #{op}"
+            end
+          end)
+          ops
+        rescue
+          e in ArgumentError -> raise e
+          _ -> raise ArgumentError, "Invalid CIGAR format"
+        end
+
+      start_pos = alignment.pos - 1  # Convert to 0-based
+
+      # Check if starting position is valid
+      if start_pos < 0 do
+        raise ArgumentError, "Reference sequence access out of bounds"
       end
-    end)
 
-    start_pos = alignment.pos - 1  # Convert to 0-based
+      # Calculate reference length needed
+      ref_length = Enum.reduce(operations, 0, fn {count, op}, acc ->
+        case op do
+          op when op in ["M", "=", "X", "D", "N"] -> acc + count
+          _ -> acc
+        end
+      end)
 
-    # Calculate reference length needed
-    ref_length = Enum.reduce(operations, 0, fn {count, op}, acc ->
-      case op do
-        op when op in ["M", "=", "X", "D", "N"] -> acc + count
-        _ -> acc
+      # Check if position is completely outside reference bounds
+      if start_pos >= byte_size(reference) do
+        raise ArgumentError, "Reference sequence access out of bounds"
       end
-    end)
 
-    # Then validate reference bounds
-    if start_pos < 0 or start_pos + ref_length > byte_size(reference) do
-      raise ArgumentError, "Reference sequence access out of bounds"
+      # Adjust ref_length if it extends beyond the reference
+      actual_ref_length = min(ref_length, byte_size(reference) - start_pos)
+
+      reference_part = binary_part(reference, start_pos, actual_ref_length)
+
+      # Apply CIGAR operations
+      {ref_seq, _} = Enum.reduce(operations, {[], 0}, fn {count, op}, {acc, ref_pos} ->
+        case op do
+          op when op in ["M", "=", "X"] ->
+            # Handle potential out-of-bounds access within the operation
+            actual_count = min(count, actual_ref_length - ref_pos)
+            if actual_count <= 0 do
+              {acc, ref_pos}
+            else
+              seq = binary_part(reference_part, ref_pos, actual_count)
+              {acc ++ [seq], ref_pos + actual_count}
+            end
+          "D" ->
+            actual_count = min(count, actual_ref_length - ref_pos)
+            {acc, ref_pos + actual_count}
+          "N" ->
+            actual_count = min(count, actual_ref_length - ref_pos)
+            if actual_count <= 0 do
+              {acc, ref_pos}
+            else
+              {acc ++ [String.duplicate("N", actual_count)], ref_pos + actual_count}
+            end
+          _ -> {acc, ref_pos}
+        end
+      end)
+
+      Enum.join(ref_seq)
     end
-
-    reference_part = binary_part(reference, start_pos, ref_length)
-
-    # Apply CIGAR operations
-    {ref_seq, _} = Enum.reduce(operations, {[], 0}, fn {count, op}, {acc, ref_pos} ->
-      case op do
-        op when op in ["M", "=", "X"] ->
-          seq = binary_part(reference_part, ref_pos, count)
-          {acc ++ [seq], ref_pos + count}
-        "D" -> {acc, ref_pos + count}
-        "N" -> {acc ++ [String.duplicate("N", count)], ref_pos + count}
-        _ -> {acc, ref_pos}
-      end
-    end)
-
-    Enum.join(ref_seq)
   end
 
   @doc """
