@@ -20,7 +20,17 @@ SAM Parser provides a convenient and efficient way to work with genomic alignmen
 
 ## Installation
 
-Add `sam_parser` to your list of dependencies in `mix.exs`:
+You can install the package directly from GitHub:
+
+```elixir
+def deps do
+  [
+    {:sam_parser, git: "https://github.com//tripitakit/sam_parser.git"}
+  ]
+end
+```
+
+Or, if the package is available on Hex.pm:
 
 ```elixir
 def deps do
