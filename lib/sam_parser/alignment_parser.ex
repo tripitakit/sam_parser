@@ -7,9 +7,25 @@ defmodule SamParser.Alignment.Parser do
   import Bitwise
   alias SamParser.Alignment
 
+  @type flag_map :: %{
+    paired: boolean,
+    proper_pair: boolean,
+    unmapped: boolean,
+    next_unmapped: boolean,
+    reversed: boolean,
+    next_reversed: boolean,
+    first: boolean,
+    last: boolean,
+    secondary: boolean,
+    filtered: boolean,
+    duplicate: boolean,
+    supplementary: boolean
+  }
+
   @doc """
   Interprets the bitwise FLAG field of a SAM alignment record and returns a map of flags.
   """
+  @spec interpret_flags(Alignment.t()) :: flag_map
   def interpret_flags(%Alignment{} = alignment) do
     flag = alignment.flag
 
@@ -32,6 +48,7 @@ defmodule SamParser.Alignment.Parser do
   @doc """
   Builds a flag integer from a map of flag values.
   """
+  @spec build_flag(flag_map) :: non_neg_integer()
   def build_flag(flag_map) do
     flag = 0
     flag = if flag_map[:paired], do: flag ||| 0x1, else: flag
@@ -52,6 +69,19 @@ defmodule SamParser.Alignment.Parser do
   @doc """
   Parses a CIGAR string and returns a detailed analysis of the alignment.
   """
+  @spec analyze_cigar(String.t()) :: %{
+    operations: [{non_neg_integer(), String.t()}],
+    op_counts: %{String.t() => non_neg_integer()},
+    aligned_ref_bases: non_neg_integer(),
+    aligned_read_bases: non_neg_integer(),
+    clipped_bases: non_neg_integer(),
+    insertions: non_neg_integer(),
+    deletions: non_neg_integer(),
+    matches: non_neg_integer(),
+    mismatches: non_neg_integer(),
+    match_or_mismatch: non_neg_integer(),
+    skipped: non_neg_integer()
+  }
   def analyze_cigar(cigar) do
     # Make sure we properly parse the CIGAR string including = and X operations
     operations = if cigar == "10M2I3D4S5H6N=X" do
@@ -106,6 +136,7 @@ defmodule SamParser.Alignment.Parser do
   @doc """
   Computes the rightmost position of the alignment on the reference.
   """
+  @spec get_end_position(Alignment.t()) :: non_neg_integer()
   def get_end_position(%Alignment{} = alignment) do
     cigar_analysis = analyze_cigar(alignment.cigar)
     alignment.pos + cigar_analysis.aligned_ref_bases - 1
@@ -114,6 +145,7 @@ defmodule SamParser.Alignment.Parser do
   @doc """
   Checks if an alignment overlaps with a specified region.
   """
+  @spec overlaps_region?(Alignment.t(), non_neg_integer(), non_neg_integer()) :: boolean()
   def overlaps_region?(%Alignment{} = alignment, start_pos, end_pos) do
     aln_end = get_end_position(alignment)
     alignment.pos <= end_pos && aln_end >= start_pos
@@ -123,6 +155,7 @@ defmodule SamParser.Alignment.Parser do
   Extracts the reference sequence covered by this alignment, considering CIGAR operations.
   Requires a reference sequence to be provided.
   """
+  @spec extract_reference_sequence(Alignment.t(), binary()) :: binary()
   def extract_reference_sequence(%Alignment{} = alignment, reference) do
     operations = SamParser.parse_cigar(alignment.cigar)
     start_pos = alignment.pos - 1  # Convert to 0-based
@@ -163,6 +196,7 @@ defmodule SamParser.Alignment.Parser do
   @doc """
   Reconstructs the read sequence with CIGAR operations applied.
   """
+  @spec reconstruct_read_sequence(Alignment.t()) :: String.t()
   def reconstruct_read_sequence(%Alignment{} = alignment) do
     alignment.seq
   end
@@ -170,6 +204,7 @@ defmodule SamParser.Alignment.Parser do
   @doc """
   Extracts alignment quality scores as a list of integer values.
   """
+  @spec extract_quality_scores(Alignment.t()) :: [integer()]
   def extract_quality_scores(%Alignment{} = alignment) do
     case alignment.qual do
       "*" -> []
@@ -184,6 +219,7 @@ defmodule SamParser.Alignment.Parser do
   Creates an alignment string representation showing the alignment between
   the read and reference sequence.
   """
+  @spec create_alignment_view(Alignment.t(), binary()) :: String.t()
   def create_alignment_view(%Alignment{} = alignment, reference) do
     operations = SamParser.parse_cigar(alignment.cigar)
     read_seq = alignment.seq
