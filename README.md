@@ -467,6 +467,6 @@ https://github.com/tripitakit/sam_parser
 ```
 
 
-## Contact
+## Contacts
 
 Patrick De Marta - patrick.demarta@gmail.com
